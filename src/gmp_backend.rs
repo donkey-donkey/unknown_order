@@ -3,13 +3,8 @@
     SPDX-License-Identifier: Apache-2.0
 */
 use crate::{get_mod, GcdResult};
-use rand::{Error, RngCore};
-use rug::{Assign, Complete, Integer};
-use serde::{
-    de::{Error as DError, Unexpected, Visitor},
-    Deserialize, Deserializer, Serialize, Serializer,
-};
-use std::{
+use alloc::vec::Vec;
+use core::{
     cmp::{Eq, Ordering, PartialEq, PartialOrd},
     fmt::{self, Debug, Display},
     iter::{Product, Sum},
@@ -18,6 +13,9 @@ use std::{
         SubAssign,
     },
 };
+use rand::{Error, RngCore};
+use rug::rand::ThreadRandState;
+use rug::{Assign, Complete, Integer};
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
@@ -26,27 +24,41 @@ use zeroize::Zeroize;
 pub struct Bn(pub(crate) Integer);
 
 clone_impl!(|b: &Bn| b.0.clone());
-default_impl!(|| Integer::new());
+default_impl!(Integer::new);
 display_impl!();
 eq_impl!();
 #[cfg(target_pointer_width = "64")]
-from_impl!(|d: i128| Integer::from(d), i128);
+from_impl!(Integer::from, i128);
 #[cfg(target_pointer_width = "64")]
-from_impl!(|d: u128| Integer::from(d), u128);
-from_impl!(|d: usize| Integer::from(d), usize);
-from_impl!(|d: u64| Integer::from(d), u64);
-from_impl!(|d: u32| Integer::from(d), u32);
-from_impl!(|d: u16| Integer::from(d), u16);
-from_impl!(|d: u8| Integer::from(d), u8);
-from_impl!(|d: isize| Integer::from(d), isize);
-from_impl!(|d: i64| Integer::from(d), i64);
-from_impl!(|d: i32| Integer::from(d), i32);
-from_impl!(|d: i16| Integer::from(d), i16);
-from_impl!(|d: i8| Integer::from(d), i8);
+from_impl!(Integer::from, u128);
+from_impl!(Integer::from, usize);
+from_impl!(Integer::from, u64);
+from_impl!(Integer::from, u32);
+from_impl!(Integer::from, u16);
+from_impl!(Integer::from, u8);
+from_impl!(Integer::from, isize);
+from_impl!(Integer::from, i64);
+from_impl!(Integer::from, i32);
+from_impl!(Integer::from, i16);
+from_impl!(Integer::from, i8);
 iter_impl!();
-serdes_impl!(|b: &Bn| b.0.to_string_radix(16), |s: &str| {
-    Integer::from_str_radix(s, 16)
-});
+serdes_impl!(
+    |b: &Bn| b.0.to_string_radix(16),
+    |s: &str| { Integer::from_str_radix(s, 16).ok() },
+    |b: &Bn| {
+        use num_traits::sign::Signed;
+        let mut digits = (&b.0).abs().to_digits::<u8>(rug::integer::Order::LsfBe);
+        digits.insert(0, if b.0.is_negative() { 1 } else { 0 });
+        digits
+    },
+    |s: &[u8]| {
+        if s.is_empty() {
+            return None;
+        }
+        let result = Integer::from_digits(&s[1..], rug::integer::Order::LsfBe);
+        Some(if s[0] == 1 { -result } else { result })
+    }
+);
 zeroize_impl!(|b: &mut Bn| b.0 -= b.0.clone());
 
 binops_impl!(Add, add, AddAssign, add_assign, +, +=);
@@ -185,7 +197,12 @@ impl Bn {
 
     /// self == 1
     pub fn is_one(&self) -> bool {
-        self.0 == Integer::from(1)
+        self.0 == 1
+    }
+
+    /// Return the bit length
+    pub fn bit_length(&self) -> usize {
+        self.0.significant_bits() as usize
     }
 
     /// Compute the greatest common divisor
@@ -208,7 +225,7 @@ impl Bn {
     pub fn from_rng(n: &Self, rng: &mut impl RngCore) -> Self {
         let mut e_rng = ExternalRand { rng };
 
-        let size = n.0.significant_bits() as usize;
+        let size = n.0.significant_bits();
 
         loop {
             let b = _random_nbit(size, &mut e_rng);
@@ -255,11 +272,17 @@ impl Bn {
 
     /// Generate a safe prime with `size` bits
     pub fn safe_prime(size: usize) -> Self {
+        Self::safe_prime_from_rng(size, &mut GmpRand::default())
+    }
+
+    /// Generate a safe prime with `size` bits with a user-provided rng
+    pub fn safe_prime_from_rng(size: usize, rng: &mut impl RngCore) -> Self {
         use rug::integer::IsPrime;
 
-        let mut rng = GmpRand::default();
+        let mut e_rng = ExternalRand { rng };
+
         loop {
-            let mut p = _random_nbit(size - 1, &mut rng);
+            let mut p = _random_nbit((size - 1) as u32, &mut e_rng);
 
             // Set the MSB bit so that we're sampling from [2^(size - 2), 2^(size - 1))
             p.set_bit((size - 2) as u32, true);
@@ -276,8 +299,13 @@ impl Bn {
 
     /// Generate a prime with `size` bits
     pub fn prime(size: usize) -> Self {
-        let mut gmprng = GmpRand::default();
-        let mut p = _random_nbit(size, &mut gmprng);
+        Self::prime_from_rng(size, &mut GmpRand::default())
+    }
+
+    /// Generate a prime with `size` bits with a user-provided rng
+    pub fn prime_from_rng(size: usize, rng: &mut impl RngCore) -> Self {
+        let mut e_rng = ExternalRand { rng };
+        let mut p = _random_nbit(size as u32, &mut e_rng);
 
         // Set the MSB bit so that we're sampling from [2^(size - 1), 2^size)
         p.set_bit((size - 1) as u32, true);
@@ -304,17 +332,10 @@ impl Bn {
 }
 
 /// Sample a bignum from [0, 2^size)
-fn _random_nbit<R: rug::rand::ThreadRandGen>(size: usize, gmprng: &mut R) -> Integer {
-    use rug::rand::ThreadRandState;
-
+fn _random_nbit<R: rug::rand::ThreadRandGen>(size: u32, gmprng: &mut R) -> Integer {
     let mut rng = ThreadRandState::new_custom(gmprng);
-
     let mut x = Integer::new();
-    let len = size as u32;
-    while x.significant_bits() != len {
-        x.assign(Integer::random_bits(size as u32, &mut rng));
-    }
-
+    x.assign(Integer::random_bits(size, &mut rng));
     x
 }
 

@@ -214,42 +214,71 @@ macro_rules! clone_impl {
 }
 
 macro_rules! serdes_impl {
-    ($ser:expr, $des:expr) => {
-        impl Serialize for Bn {
+    ($ser_str:expr, $des_str:expr, $ser_bytes:expr, $des_bytes:expr) => {
+        impl serde::Serialize for Bn {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
-                S: Serializer,
+                S: serde::Serializer,
             {
-                let str = $ser(self);
-                serializer.serialize_str(&str)
+                if serializer.is_human_readable() {
+                    let str = $ser_str(self);
+                    serializer.serialize_str(&str)
+                } else {
+                    let bytes = $ser_bytes(self);
+                    serializer.serialize_bytes(&bytes)
+                }
             }
         }
 
-        impl<'de> Deserialize<'de> for Bn {
+        impl<'de> serde::Deserialize<'de> for Bn {
             fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
             where
-                D: Deserializer<'de>,
+                D: serde::Deserializer<'de>,
             {
-                struct BnVisitor;
+                struct BnVisitorStr;
+                struct BnVisitorBytes;
 
-                impl<'de> Visitor<'de> for BnVisitor {
+                impl<'de> serde::de::Visitor<'de> for BnVisitorStr {
                     type Value = Bn;
 
                     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                         write!(f, "a hex encoded string")
                     }
 
-                    fn visit_str<E>(self, s: &str) -> Result<Bn, E>
+                    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
                     where
-                        E: DError,
+                        E: serde::de::Error,
                     {
-                        let b = $des(s)
-                            .map_err(|_| DError::invalid_value(Unexpected::Str(s), &self))?;
+                        let b = $des_str(s).ok_or_else(|| {
+                            serde::de::Error::invalid_value(serde::de::Unexpected::Str(s), &self)
+                        })?;
                         Ok(Bn(b))
                     }
                 }
 
-                deserializer.deserialize_str(BnVisitor)
+                impl<'de> serde::de::Visitor<'de> for BnVisitorBytes {
+                    type Value = Bn;
+
+                    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(f, "a bytestring")
+                    }
+
+                    fn visit_bytes<E>(self, s: &[u8]) -> Result<Self::Value, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        let b = $des_bytes(s).ok_or_else(|| {
+                            serde::de::Error::invalid_value(serde::de::Unexpected::Bytes(s), &self)
+                        })?;
+                        Ok(Bn(b))
+                    }
+                }
+
+                if deserializer.is_human_readable() {
+                    deserializer.deserialize_str(BnVisitorStr)
+                } else {
+                    deserializer.deserialize_bytes(BnVisitorBytes)
+                }
             }
         }
     };
@@ -328,7 +357,7 @@ macro_rules! wasm_slice_impl {
             unsafe fn from_abi(js: Self::Abi) -> Self {
                 let ptr = <*mut u8>::from_abi(js.ptr);
                 let len = js.len as usize;
-                let r = std::slice::from_raw_parts(ptr, len);
+                let r = core::slice::from_raw_parts(ptr, len);
                 $name::from_slice(&r)
             }
         }
@@ -345,13 +374,11 @@ macro_rules! wasm_slice_impl {
             }
         }
 
-        impl std::convert::TryFrom<wasm_bindgen::JsValue> for $name {
+        impl core::convert::TryFrom<wasm_bindgen::JsValue> for $name {
             type Error = &'static str;
 
             fn try_from(value: wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
-                value
-                    .into_serde::<$name>()
-                    .map_err(|_| "unable to deserialize value")
+                serde_wasm_bindgen::from_value(value).map_err(|_| "unable to deserialize value")
             }
         }
     };

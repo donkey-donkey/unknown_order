@@ -3,19 +3,8 @@
     SPDX-License-Identifier: Apache-2.0
 */
 use crate::{get_mod, GcdResult};
-use glass_pumpkin::{prime, safe_prime};
-use num_bigint::{BigInt, Sign, ToBigInt};
-use num_integer::Integer;
-use num_traits::{
-    identities::{One, Zero},
-    Num,
-};
-use rand::RngCore;
-use serde::{
-    de::{Error as DError, Unexpected, Visitor},
-    Deserialize, Deserializer, Serialize, Serializer,
-};
-use std::{
+use alloc::{vec, vec::Vec};
+use core::{
     cmp::{Eq, Ord, PartialEq, PartialOrd},
     fmt::{self, Debug, Display},
     iter::{Product, Sum},
@@ -25,6 +14,14 @@ use std::{
         SubAssign,
     },
 };
+use glass_pumpkin::{prime, safe_prime};
+use num_bigint::{BigInt, Sign, ToBigInt};
+use num_integer::Integer;
+use num_traits::{
+    identities::{One, Zero},
+    Num,
+};
+use rand::RngCore;
 use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
@@ -33,27 +30,30 @@ use zeroize::Zeroize;
 pub struct Bn(pub(crate) BigInt);
 
 clone_impl!(|b: &Bn| b.0.clone());
-default_impl!(|| BigInt::default());
+default_impl!(BigInt::default);
 display_impl!();
 eq_impl!();
 #[cfg(target_pointer_width = "64")]
-from_impl!(|d: i128| BigInt::from(d), i128);
+from_impl!(BigInt::from, i128);
 #[cfg(target_pointer_width = "64")]
-from_impl!(|d: u128| BigInt::from(d), u128);
-from_impl!(|d: usize| BigInt::from(d), usize);
-from_impl!(|d: u64| BigInt::from(d), u64);
-from_impl!(|d: u32| BigInt::from(d), u32);
-from_impl!(|d: u16| BigInt::from(d), u16);
-from_impl!(|d: u8| BigInt::from(d), u8);
-from_impl!(|d: isize| BigInt::from(d), isize);
-from_impl!(|d: i64| BigInt::from(d), i64);
-from_impl!(|d: i32| BigInt::from(d), i32);
-from_impl!(|d: i16| BigInt::from(d), i16);
-from_impl!(|d: i8| BigInt::from(d), i8);
+from_impl!(BigInt::from, u128);
+from_impl!(BigInt::from, usize);
+from_impl!(BigInt::from, u64);
+from_impl!(BigInt::from, u32);
+from_impl!(BigInt::from, u16);
+from_impl!(BigInt::from, u8);
+from_impl!(BigInt::from, isize);
+from_impl!(BigInt::from, i64);
+from_impl!(BigInt::from, i32);
+from_impl!(BigInt::from, i16);
+from_impl!(BigInt::from, i8);
 iter_impl!();
-serdes_impl!(|b: &Bn| b.0.to_str_radix(16), |s: &str| {
-    BigInt::from_str_radix(s, 16)
-});
+serdes_impl!(
+    |b: &Bn| b.0.to_str_radix(16),
+    |s: &str| { BigInt::from_str_radix(s, 16).ok() },
+    |b: &Bn| b.0.to_signed_bytes_be(),
+    |s: &[u8]| -> Option<BigInt> { Some(BigInt::from_signed_bytes_be(s)) }
+);
 zeroize_impl!(|b: &mut Bn| b.0.set_zero());
 binops_impl!(Add, add, AddAssign, add_assign, +, +=);
 binops_impl!(Sub, sub, SubAssign, sub_assign, -, -=);
@@ -224,6 +224,11 @@ impl Bn {
         Self(BigInt::one())
     }
 
+    /// Return the bit length
+    pub fn bit_length(&self) -> usize {
+        self.0.bits() as usize
+    }
+
     /// Compute the greatest common divisor
     pub fn gcd(&self, other: &Self) -> Self {
         Self(self.0.gcd(&other.0))
@@ -242,10 +247,15 @@ impl Bn {
 
     /// Generate a random value less than `n` using the specific random number generator
     pub fn from_rng(n: &Self, rng: &mut impl RngCore) -> Self {
-        let len = (n.0.bits() - 1) / 8;
-        let mut t = vec![0u8; len as usize];
+        let bits = n.0.bits() as usize;
+        let len_bytes = (bits - 1) / 8 + 1;
+        let high_bits = len_bytes * 8 - bits;
+        let mut t = vec![0u8; len_bytes as usize];
         loop {
             rng.fill_bytes(&mut t);
+            if high_bits > 0 {
+                t[0] &= u8::MAX >> high_bits;
+            }
             let b = BigInt::from_bytes_be(Sign::Plus, &t);
             if b < n.0 {
                 return Self(b);
@@ -314,13 +324,25 @@ impl Bn {
 
     /// Generate a safe prime with `size` bits
     pub fn safe_prime(size: usize) -> Self {
-        let p = safe_prime::new(size).unwrap();
+        let mut rng = rand::thread_rng();
+        Self::safe_prime_from_rng(size, &mut rng)
+    }
+
+    /// Generate a safe prime with `size` bits with a user-provided rng
+    pub fn safe_prime_from_rng(size: usize, rng: &mut impl RngCore) -> Self {
+        let p = safe_prime::from_rng(size, rng).unwrap();
         Self(p.to_bigint().unwrap())
     }
 
     /// Generate a prime with `size` bits
     pub fn prime(size: usize) -> Self {
-        let p = prime::new(size).unwrap();
+        let mut rng = rand::thread_rng();
+        Self::prime_from_rng(size, &mut rng)
+    }
+
+    /// Generate a prime with `size` bits with a user-provided rng
+    pub fn prime_from_rng(size: usize, rng: &mut impl RngCore) -> Self {
+        let p = prime::from_rng(size, rng).unwrap();
         Self(p.to_bigint().unwrap())
     }
 
