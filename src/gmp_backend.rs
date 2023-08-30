@@ -262,7 +262,7 @@ impl Bn {
 
     /// Compute the extended euclid algorithm and return the Bézout coefficients and GCD
     pub fn extended_gcd(&self, other: &Bn) -> GcdResult {
-        let (gcd, x, y) = self.0.gcd_cofactors_ref(&other.0).complete();
+        let (gcd, x, y) = self.0.extended_gcd_ref(&other.0).complete();
         GcdResult {
             gcd: Self(gcd),
             x: Self(x),
