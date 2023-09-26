@@ -213,7 +213,7 @@ macro_rules! clone_impl {
     };
 }
 
-macro_rules! serdes_impl {
+/*macro_rules! serdes_impl {
     ($ser_str:expr, $des_str:expr, $ser_bytes:expr, $des_bytes:expr) => {
         impl serde::Serialize for Bn {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -282,7 +282,7 @@ macro_rules! serdes_impl {
             }
         }
     };
-}
+}*/
 
 macro_rules! eq_impl {
     () => {
