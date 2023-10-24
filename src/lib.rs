@@ -32,18 +32,46 @@
     warnings
 )]
 
-extern crate alloc;
-
+#[cfg(not(feature = "crypto"))]
 #[macro_use]
 mod macros;
 
-#[cfg(all(feature = "openssl", feature = "rust"))]
-compile_error!(r#"Cannot compile both features "openssl" and "rust""#);
-#[cfg(all(feature = "openssl", feature = "gmp"))]
-compile_error!(r#"Cannot compile both features "openssl" and "gmp""#);
-#[cfg(all(feature = "rust", feature = "gmp"))]
-compile_error!(r#"Cannot compile both features "rust" and "gmp""#);
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
+#[cfg(all(
+    feature = "gmp",
+    feature = "openssl",
+    feature = "rust",
+    feature = "crypto"
+))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "openssl", feature = "rust", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "gmp", feature = "rust", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "gmp", feature = "openssl", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "gmp", feature = "openssl", feature = "rust"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "openssl", feature = "rust"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "openssl", feature = "gmp"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "openssl", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "gmp", feature = "rust"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "gmp", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+#[cfg(all(feature = "rust", feature = "crypto"))]
+compile_error!(r#"Cannot compile more than one number backend""#);
+
+#[cfg(feature = "crypto")]
+mod crypto_backend;
 #[cfg(feature = "gmp")]
 mod gmp_backend;
 #[cfg(feature = "openssl")]
@@ -51,6 +79,8 @@ mod openssl_backend;
 #[cfg(feature = "rust")]
 mod rust_backend;
 
+#[cfg(feature = "crypto")]
+use crypto_backend as b;
 #[cfg(feature = "gmp")]
 use gmp_backend as b;
 #[cfg(feature = "openssl")]
@@ -61,7 +91,7 @@ use rust_backend as b;
 mod gcd_result;
 mod group;
 
-#[cfg(any(feature = "rust", feature = "gmp"))]
+#[cfg(any(feature = "rust", feature = "gmp", feature = "crypto"))]
 pub(crate) fn get_mod(n: &BigNumber) -> BigNumber {
     if n < &BigNumber::zero() {
         -n.clone()

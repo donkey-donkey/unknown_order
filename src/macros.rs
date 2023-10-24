@@ -104,7 +104,7 @@ macro_rules! neg_impl {
 }
 
 macro_rules! shift_impl {
-    (@ref $ops:ident, $func:ident, $opr:expr, $($rhs:ty),+) => {$(
+    (@ref $ops:ident, $func:ident, $ops_assign:ident, $func_assign:ident, $opr:expr, $($rhs:ty),+) => {$(
         impl<'a> $ops<$rhs> for &'a Bn {
             type Output = Bn;
 
@@ -120,10 +120,17 @@ macro_rules! shift_impl {
                 $opr(&self.0, rhs)
             }
         }
+
+        impl $ops_assign<$rhs> for Bn {
+            fn $func_assign(&mut self, rhs: $rhs) {
+                let t = $opr(&self.0, rhs);
+                *self = t;
+            }
+        }
     )*};
-    ($ops:ident, $func:ident, $opr:expr) => {
-        shift_impl!(@ref $ops, $func, $opr, u8, u16, u32, u64, usize);
-        shift_impl!(@ref $ops, $func, $opr, i8, i16, i32, i64, isize);
+    ($ops:ident, $func:ident, $ops_assign:ident, $func_assign:ident, $opr:expr) => {
+        shift_impl!(@ref $ops, $func, $ops_assign, $func_assign, $opr, u8, u16, u32, u64, usize);
+        shift_impl!(@ref $ops, $func, $ops_assign, $func_assign, $opr, i8, i16, i32, i64, isize);
     };
 }
 

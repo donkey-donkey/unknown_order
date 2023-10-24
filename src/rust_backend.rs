@@ -10,8 +10,8 @@ use core::{
     iter::{Product, Sum},
     mem::swap,
     ops::{
-        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, Shr, Sub,
-        SubAssign,
+        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr,
+        ShrAssign, Sub, SubAssign,
     },
 };
 use glass_pumpkin::{prime, safe_prime};
@@ -26,7 +26,7 @@ use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
 /// Big number
-#[derive(Ord, PartialOrd)]
+#[derive(Ord, PartialOrd, Hash)]
 pub struct Bn(pub(crate) BigInt);
 
 clone_impl!(|b: &Bn| b.0.clone());
@@ -61,8 +61,8 @@ binops_impl!(Mul, mul, MulAssign, mul_assign, *, *=);
 binops_impl!(Div, div, DivAssign, div_assign, /, /=);
 binops_impl!(Rem, rem, RemAssign, rem_assign, %, %=);
 neg_impl!(|b: &BigInt| Bn(-b));
-shift_impl!(Shl, shl, |lhs, rhs| Bn(lhs << rhs));
-shift_impl!(Shr, shr, |lhs, rhs| Bn(lhs >> rhs));
+shift_impl!(Shl, shl, ShlAssign, shl_assign, |lhs, rhs| Bn(lhs << rhs));
+shift_impl!(Shr, shr, ShrAssign, shr_assign, |lhs, rhs| Bn(lhs >> rhs));
 #[cfg(feature = "wasm")]
 wasm_slice_impl!(Bn);
 
@@ -286,6 +286,12 @@ impl Bn {
     pub fn to_bytes(&self) -> Vec<u8> {
         let (_, bytes) = self.0.to_bytes_be();
         bytes
+    }
+
+    /// Convert this big number to a big-endian byte sequence and store it in `buffer`.
+    /// The sign is not included
+    pub fn copy_bytes_into_buffer(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(&self.to_bytes())
     }
 
     /// Compute the extended euclid algorithm and return the Bézout coefficients and GCD

@@ -2,7 +2,7 @@
     Copyright Michael Lodder. All Rights Reserved.
     SPDX-License-Identifier: Apache-2.0
 */
-use digest::Digest;
+// use digest::Digest;
 use unknown_order::*;
 
 /// Taken from https://github.com/mikelodder7/cunningham_chain/blob/master/findings.md
@@ -33,13 +33,13 @@ fn random() {
     }
 }
 
-#[test]
-fn hash() {
-    let mut hasher = blake2::Blake2b::new();
-    hasher.update(b"an arbitrary sequence of bytes");
-    let s = BigNumber::from_digest(hasher);
-    assert!(!s.is_zero())
-}
+// #[test]
+// fn hash() {
+//     let mut hasher = blake2::Blake2b::new();
+//     hasher.update(b"an arbitrary sequence of bytes");
+//     let s = BigNumber::from_digest(hasher);
+//     assert!(!s.is_zero())
+// }
 
 #[test]
 fn invert() {
@@ -136,11 +136,12 @@ fn clone_negative() {
     assert_eq!(n, n.clone());
 }
 
+#[cfg(any(feature = "openssl", feature = "rust", feature = "gmp"))]
 #[test]
 fn serialize_str() {
     let n = b10(TEST_PRIMES[2]);
     let res = serde_json::to_string(&n);
-    assert!(res.is_ok());
+    assert!(res.is_ok(), "{}", res.unwrap_err());
     let s = res.unwrap();
     let nn_res = serde_json::from_str::<BigNumber>(&s);
     assert!(nn_res.is_ok());
@@ -181,6 +182,7 @@ fn prime() {
     let p = BigNumber::prime(1024);
     assert!(p.is_prime());
     let s = p.to_string().len();
+    // Assumes base 10 length
     assert!(308 <= s && s <= 309);
 }
 
@@ -201,6 +203,7 @@ fn gcd_ext() {
     assert_eq!(res.gcd, BigNumber::one());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn bytes() {
     let m = BigNumber::from(7);

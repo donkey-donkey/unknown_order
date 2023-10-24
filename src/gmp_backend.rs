@@ -9,8 +9,8 @@ use core::{
     fmt::{self, Debug, Display},
     iter::{Product, Sum},
     ops::{
-        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, Shr, Sub,
-        SubAssign,
+        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr,
+        ShrAssign, Sub, SubAssign,
     },
 };
 use rand::{Error, RngCore};
@@ -20,7 +20,7 @@ use subtle::{Choice, ConstantTimeEq};
 use zeroize::Zeroize;
 
 /// Big number
-#[derive(Ord, PartialOrd)]
+#[derive(Ord, PartialOrd, Hash)]
 pub struct Bn(pub(crate) Integer);
 
 clone_impl!(|b: &Bn| b.0.clone());
@@ -67,12 +67,12 @@ binops_impl!(Mul, mul, MulAssign, mul_assign, *, *=);
 binops_impl!(Div, div, DivAssign, div_assign, /, /=);
 binops_impl!(Rem, rem, RemAssign, rem_assign, %, %=);
 neg_impl!(|b: &Integer| Bn(b.neg().complete()));
-shift_impl!(Shl, shl, |lhs: &Integer, rhs| Bn(lhs
-    .shl(rhs as u32)
-    .complete()));
-shift_impl!(Shr, shr, |lhs: &Integer, rhs| Bn(lhs
-    .shr(rhs as u32)
-    .complete()));
+shift_impl!(Shl, shl, ShlAssign, shl_assign, |lhs: &Integer, rhs| Bn(
+    lhs.shl(rhs as u32).complete()
+));
+shift_impl!(Shr, shr, ShrAssign, shr_assign, |lhs: &Integer, rhs| Bn(
+    lhs.shr(rhs as u32).complete()
+));
 
 impl ConstantTimeEq for Bn {
     fn ct_eq(&self, other: &Self) -> Choice {
@@ -258,6 +258,12 @@ impl Bn {
     /// Convert this big number to a big-endian byte sequence
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_digits::<u8>(rug::integer::Order::MsfBe)
+    }
+
+    /// Convert this big number to a big-endian byte sequence and store it in `buffer`.
+    /// The sign is not included
+    pub fn copy_bytes_into_buffer(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(&self.to_bytes())
     }
 
     /// Compute the extended euclid algorithm and return the Bézout coefficients and GCD

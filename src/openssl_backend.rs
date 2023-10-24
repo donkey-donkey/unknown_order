@@ -10,8 +10,8 @@ use core::{
     iter::{Product, Sum},
     mem::swap,
     ops::{
-        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, Shr, Sub,
-        SubAssign,
+        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Shl, ShlAssign, Shr,
+        ShrAssign, Sub, SubAssign,
     },
 };
 use openssl::bn::{BigNum, BigNumContext, BigNumRef};
@@ -22,6 +22,12 @@ use zeroize::Zeroize;
 /// Big number
 #[derive(Ord, PartialOrd)]
 pub struct Bn(pub(crate) BigNum);
+
+impl core::hash::Hash for Bn {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_vec().hash(state)
+    }
+}
 
 fn from_isize(d: isize) -> BigNum {
     if d < 0 {
@@ -192,7 +198,7 @@ neg_impl!(|b: &BigNum| {
     n.set_negative(!b.is_negative());
     Bn(n)
 });
-shift_impl!(Shl, shl, |lhs: &BigNum, rhs| {
+shift_impl!(Shl, shl, ShlAssign, shl_assign, |lhs: &BigNum, rhs| {
     let mut n = BigNum::new().unwrap();
     if rhs == 1 {
         BigNumRef::lshift1(&mut n, lhs).unwrap();
@@ -201,7 +207,7 @@ shift_impl!(Shl, shl, |lhs: &BigNum, rhs| {
     }
     Bn(n)
 });
-shift_impl!(Shr, shr, |lhs: &BigNum, rhs| {
+shift_impl!(Shr, shr, ShrAssign, shr_assign, |lhs: &BigNum, rhs| {
     let mut n = BigNum::new().unwrap();
     if rhs == 1 {
         BigNumRef::rshift1(&mut n, lhs).unwrap();
@@ -379,6 +385,12 @@ impl Bn {
     /// Convert this big number to a big-endian byte sequence
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_vec()
+    }
+
+    /// Convert this big number to a big-endian byte sequence and store it in `buffer`.
+    /// The sign is not included
+    pub fn copy_bytes_into_buffer(&self, buffer: &mut [u8]) {
+        buffer.copy_from_slice(&self.to_bytes())
     }
 
     /// Compute the extended euclid algorithm and return the Bézout coefficients and GCD
