@@ -16,7 +16,9 @@ use core::{
 };
 use crypto_bigint::rand_core::CryptoRngCore;
 use crypto_bigint::{
-    modular::runtime_mod, rand_core, CheckedAdd, CheckedMul, CheckedSub, Encoding, Integer,
+    modular::runtime_mod,
+    //rand_core,
+    CheckedAdd, CheckedMul, CheckedSub, Encoding, Integer,
     NonZero, RandomMod, Zero, U4096,
 };
 use num_traits::PrimInt;
@@ -976,11 +978,11 @@ impl Bn {
         }
     }
 
-    /// Generate a random value less than `n`
+   /* /// Generate a random value less than `n`
     pub fn random(n: &Self) -> Self {
         Self::from_rng(n, &mut rand_core::OsRng)
     }
-
+*/
     /// Generate a random value less than `n` using the specific random number generator
     pub fn from_rng(n: &Self, rng: &mut impl CryptoRngCore) -> Self {
         if n.is_zero() {
@@ -1064,11 +1066,12 @@ impl Bn {
         }
     }
 
+    /*
     /// Generate a safe prime with `size` bits
     pub fn safe_prime(size: usize) -> Self {
         Self::safe_prime_from_rng(size, &mut rand_core::OsRng)
     }
-
+*/
     /// Generate a safe prime with `size` bits with a user-provided rng
     pub fn safe_prime_from_rng(size: usize, rng: &mut impl CryptoRngCore) -> Self {
         Self {
@@ -1077,10 +1080,10 @@ impl Bn {
         }
     }
 
-    /// Generate a prime with `size` bits
+    /*/// Generate a prime with `size` bits
     pub fn prime(size: usize) -> Self {
         Self::prime_from_rng(size, &mut rand_core::OsRng)
-    }
+    }*/
 
     /// Generate a prime with `size` bits with a user-provided rng
     pub fn prime_from_rng(size: usize, rng: &mut impl CryptoRngCore) -> Self {
@@ -1090,10 +1093,11 @@ impl Bn {
         }
     }
 
+    /*
     /// True if a prime number
     pub fn is_prime(&self) -> bool {
         crypto_primes::is_prime_with_rng(&mut rand_core::OsRng, &self.value)
-    }
+    }*/
 
     /// Return zero
     pub fn zero() -> Self {
