@@ -17,8 +17,9 @@ repository = "https://github.com/mikelodder7/unknown_order"
 version = "0.7.0-rc0"
 
 [features]
+alloc = ["crypto-bigint/serde", "crypto-bigint/alloc", "serde/alloc"] # cannot use with substate wasm "crypto-bigint/default",
 default = ["alloc", "crypto"]
-alloc = ["crypto-bigint/serde"]
+#alloc = ["crypto-bigint/serde"]
 crypto = ["crypto-bigint", "crypto-primes", "multibase", "num-traits"]
 gmp = ["hex", "rand/default", "rug/num-traits", "num-traits"]
 openssl = ["dep:openssl"]
